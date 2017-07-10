@@ -1,5 +1,10 @@
+import logging
+logger = logging.getLogger('FaceSwap.ImageProcessing')
+debug, info = logger.debug, logger.info
+
 import numpy as np
 import cv2
+
 
 #tutaj src to obraz, z ktorego piksele beda wklejane do obrazu dst
 #feather amount to procent, sluzacy do sterowania wielkoscia obszaru, ktory bedzie poddany wagowaniu
@@ -8,6 +13,8 @@ def blendImages(src, dst, mask, featherAmount=0.2):
     maskIndices = np.where(mask != 0)
     #te same indeksy tylko, ze teraz w jednej macierzy, gdzie kazdy wiersz to jeden piksel (x, y)
     maskPts = np.hstack((maskIndices[1][:, np.newaxis], maskIndices[0][:, np.newaxis]))
+    assert len(maskPts)
+    debug( "Face mask between {} and {}".format(np.min(maskPts, axis=0), np.max(maskPts, axis=0)) )
     faceSize = np.max(maskPts, axis=0) - np.min(maskPts, axis=0)
     featherAmount = featherAmount * np.max(faceSize)
 

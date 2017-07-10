@@ -11,11 +11,6 @@ import numpy as np
 import models
 import NonLinearLeastSquares
 
-class FaceDetectError(Exception):
-	pass
-class NoFacesFound(FaceDetectError):
-	pass
-
 
 module_dir, _ = os.path.split(__file__)
 predictor_path = os.path.join(module_dir, "../shape_predictor_68_face_landmarks.dat")
@@ -89,6 +84,9 @@ def load3DFaceModel(filename=model_path):
     return mean3DShape, blendshapes, mesh, idxs3D, idxs2D
 
 def getFaceKeypoints(img, maxImgSizeForDetection=640):
+    """
+    returns a set of keypoint lists, one for each detected face
+    """
     imgScale = 1
     scaledImg = img
     if max(img.shape) > maxImgSizeForDetection:
@@ -100,7 +98,7 @@ def getFaceKeypoints(img, maxImgSizeForDetection=640):
     dets = detector(scaledImg, 1)
 
     if len(dets) == 0:
-        raise NoFacesFound()
+        return []
 
     shapes2D = []
     for det in dets:
@@ -118,10 +116,14 @@ def getFaceKeypoints(img, maxImgSizeForDetection=640):
     return shapes2D
     
 
-def getFaceTextureCoords(img, mean3DShape, blendshapes, idxs2D, idxs3D):
+def getFaceTextureCoords(keypoints, mean3DShape, blendshapes, idxs2D, idxs3D):
+    """
+    keypoints belong to an individual face
+    """
+    if not len(keypoints):
+        return
     projectionModel = models.OrthographicProjectionBlendshapes(blendshapes.shape[0])
 
-    keypoints = getFaceKeypoints(img)[0]
     args = ([mean3DShape[:, idxs3D], blendshapes[:, :, idxs3D]], keypoints[:, idxs2D])
     modelParams = projectionModel.getInitialParameters(mean3DShape[:, idxs3D], keypoints[:, idxs2D])
     modelParams = NonLinearLeastSquares.GaussNewton(modelParams, projectionModel.residual, projectionModel.jacobian, args)

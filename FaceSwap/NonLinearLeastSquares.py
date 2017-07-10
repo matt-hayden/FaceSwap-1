@@ -17,7 +17,7 @@ def GaussNewton(x0, fun, funJack, args, maxIter=10, eps=10e-7):
         r = fun(x, *args)
         cost = np.sum(r**2)
 
-        debug("Cost at iteration {}: {} ({})".format(i, cost, oldCost-cost))
+        debug("Cost at iteration {}: {:1.0e} ({:1.0e})".format(i, cost, cost-oldCost))
 
         if (cost < eps or abs(cost - oldCost) < eps):
             break
@@ -51,7 +51,7 @@ def SteepestDescent(x0, fun, funJack, args, maxIter=10, eps=10e-7):
         r = fun(x, *args)
         cost = np.sum(r**2)
 
-        debug("Cost at iteration {}: {} ({})".format(i, cost, oldCost-cost))
+        debug("Cost at iteration {}: {:1.0e} ({:1.0e})".format(i, cost, cost-oldCost))
 
         #warunki stopu
         if (cost < eps or abs(cost - oldCost) < eps):

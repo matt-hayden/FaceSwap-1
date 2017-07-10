@@ -2,7 +2,7 @@
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger('FaceSwap')
-debug, info = logger.debug, logger.info
+debug, info, warn = logger.debug, logger.info, logger.warn
 
 import os, os.path
 
@@ -20,7 +20,7 @@ import utils
 
 #the smaller this value gets the faster the detection will work
 #if it is too small, the user's face might not be detected
-maxImageSizeForDetection = 320
+maxImageSizeForDetection = 240
 
 
 mean3DShape, blendshapes, mesh, idxs3D, idxs2D = utils.load3DFaceModel()
@@ -33,24 +33,35 @@ debug( "idxs3D is {}".format(len(idxs3D)) )
 debug( "projectionModel is {}".format(projectionModel) )
 
 
-def swap_many(face_filenames, head_filenames, **kwargs):
+def swap_many(face_filenames, head_filenames, examine_keypoints=False, **kwargs):
 	fst = []
 	for f in face_filenames:
+		ffilepart, _ = os.path.splitext(os.path.basename(f))
 		i = cv2.imread(f)
-		try:
-			t = utils.getFaceTextureCoords(i, mean3DShape, blendshapes, idxs2D, idxs3D)
+		k = utils.getFaceKeypoints(i, maxImageSizeForDetection)
+		if k and (len(k) == 1):
+			t = utils.getFaceTextureCoords(k[0], mean3DShape, blendshapes, idxs2D, idxs3D)
 			fst.append((f, i.shape, t))
-		except utils.NoFacesFound:
-			warn("Skipping {}: face detection failed".format(f))
+			if examine_keypoints:
+				for shape2D in k:
+					drawPoints(i, shape2D.T)
+				assert cv2.imwrite('detect-'+ffilepart+'.jpg', i)
+		else:
+			warn("Skipping {}: {} faces detected".format(f, len(k)))
 	hss = []
 	for h in head_filenames:
+		hfilepart, _ = os.path.splitext(os.path.basename(h))
 		i = cv2.imread(h)
-		try:
-			s = utils.getFaceKeypoints(i, maxImageSizeForDetection)
-			hss.append((h, i.shape, s))
-		except utils.NoFacesFound:
-			warn("Skipping {}: face detection failed".format(h))
-	info( "Permuting {} faces and {} heads".format(len(fst), len(hss)) )
+		k = utils.getFaceKeypoints(i, maxImageSizeForDetection)
+		if k and (len(k) == 1):
+			hss.append((h, i.shape, k))
+			if examine_keypoints:
+				for shape2D in k:
+					drawPoints(i, shape2D.T)
+				assert cv2.imwrite('detect-'+hfilepart+'.jpg', i)
+		else:
+			warn("Skipping {}: {} faces detected".format(f, len(k)))
+	info( "Permuting {} faces and {} heads (n={})".format(len(fst), len(hss), len(fst)*len(hss)) )
 	for hfilename, hsize, shapes in hss:
 		hfilepart, _ = os.path.splitext(os.path.basename(hfilename))
 		backgroundImg = cv2.imread(hfilename)
@@ -62,15 +73,16 @@ def swap_many(face_filenames, head_filenames, **kwargs):
 										  textureCoords=textureCoords,
 										  shapes2D=shapes,
 										  **kwargs)
-			cv2.imwrite(hfilepart+'.'+ffilepart+'.jpg', blended)
-			cv2.imwrite(hfilepart+'.'+ffilepart+'-masked.jpg', masked)
+			assert cv2.imwrite(hfilepart+'.'+ffilepart+'.jpg', blended)
+			assert cv2.imwrite(hfilepart+'.'+ffilepart+'-masked.jpg', masked)
 
 
 def swap_images(textureImg, backgroundImg, drawOverlay=False, lockedTranslation=False,
 				textureCoords=None, renderer=None, shapes2D=None):
 	assert textureImg is not None
 	if textureCoords is None:
-		textureCoords = utils.getFaceTextureCoords(textureImg, mean3DShape, blendshapes, idxs2D, idxs3D)
+		textureKeypoints = utils.getFaceKeypoints(textureImg, maxImageSizeForDetection)
+		textureCoords = utils.getFaceTextureCoords(textureKeypoints[0], mean3DShape, blendshapes, idxs2D, idxs3D)
 	debug( "textureCoords is {}".format(len(textureCoords)) )
 
 	assert backgroundImg is not None
