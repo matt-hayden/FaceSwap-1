@@ -1,8 +1,31 @@
-import numpy as np
+import logging
+logger = logging.getLogger('FaceSwap.utils')
+debug, info = logger.debug, logger.info
+
+import os, os.path
+
 import cv2
+import dlib
+import numpy as np
+
 import models
-from dlib import rectangle
 import NonLinearLeastSquares
+
+class FaceDetectError(Exception):
+	pass
+class NoFacesFound(FaceDetectError):
+	pass
+
+
+module_dir, _ = os.path.split(__file__)
+predictor_path = os.path.join(module_dir, "../shape_predictor_68_face_landmarks.dat")
+model_path = os.path.join(module_dir, "../candide.npz")
+
+detector = dlib.get_frontal_face_detector()
+debug( "detector is {}".format(detector) )
+predictor = dlib.shape_predictor(predictor_path)
+debug( "predictor is {}".format(predictor) )
+
 
 def getNormal(triangle):
     a = triangle[:, 0]
@@ -51,7 +74,10 @@ def getShape3D(mean3DShape, blendshapes, params):
 def getMask(renderedImg):
     mask = np.zeros(renderedImg.shape[:2], dtype=np.uint8)
 
-def load3DFaceModel(filename):
+def load3DFaceModel(filename=model_path):
+    """
+	Load a NPZ format file.
+    """
     faceModelFile = np.load(filename)
     mean3DShape = faceModelFile["mean3DShape"]
     mesh = faceModelFile["mesh"]
@@ -62,7 +88,7 @@ def load3DFaceModel(filename):
 
     return mean3DShape, blendshapes, mesh, idxs3D, idxs2D
 
-def getFaceKeypoints(img, detector, predictor, maxImgSizeForDetection=640):
+def getFaceKeypoints(img, maxImgSizeForDetection=640):
     imgScale = 1
     scaledImg = img
     if max(img.shape) > maxImgSizeForDetection:
@@ -74,11 +100,11 @@ def getFaceKeypoints(img, detector, predictor, maxImgSizeForDetection=640):
     dets = detector(scaledImg, 1)
 
     if len(dets) == 0:
-        return None
+        raise NoFacesFound()
 
     shapes2D = []
     for det in dets:
-        faceRectangle = rectangle(int(det.left() / imgScale), int(det.top() / imgScale), int(det.right() / imgScale), int(det.bottom() / imgScale))
+        faceRectangle = dlib.rectangle(int(det.left() / imgScale), int(det.top() / imgScale), int(det.right() / imgScale), int(det.bottom() / imgScale))
 
         #detekcja punktow charakterystycznych twarzy
         dlibShape = predictor(img, faceRectangle)
@@ -92,12 +118,13 @@ def getFaceKeypoints(img, detector, predictor, maxImgSizeForDetection=640):
     return shapes2D
     
 
-def getFaceTextureCoords(img, mean3DShape, blendshapes, idxs2D, idxs3D, detector, predictor):
+def getFaceTextureCoords(img, mean3DShape, blendshapes, idxs2D, idxs3D):
     projectionModel = models.OrthographicProjectionBlendshapes(blendshapes.shape[0])
 
-    keypoints = getFaceKeypoints(img, detector, predictor)[0]
+    keypoints = getFaceKeypoints(img)[0]
+    args = ([mean3DShape[:, idxs3D], blendshapes[:, :, idxs3D]], keypoints[:, idxs2D])
     modelParams = projectionModel.getInitialParameters(mean3DShape[:, idxs3D], keypoints[:, idxs2D])
-    modelParams = NonLinearLeastSquares.GaussNewton(modelParams, projectionModel.residual, projectionModel.jacobian, ([mean3DShape[:, idxs3D], blendshapes[:, :, idxs3D]], keypoints[:, idxs2D]), verbose=0)
+    modelParams = NonLinearLeastSquares.GaussNewton(modelParams, projectionModel.residual, projectionModel.jacobian, args)
     textureCoords = projectionModel.fun([mean3DShape, blendshapes], modelParams)
 
     return textureCoords
